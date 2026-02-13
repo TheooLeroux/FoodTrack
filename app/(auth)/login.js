@@ -1,235 +1,150 @@
-import { useSignIn } from '@clerk/clerk-expo'
-import { Link, useRouter } from 'expo-router'
-import * as React from 'react'
-import { Pressable, StyleSheet, TextInput, View, Text, ActivityIndicator } from 'react-native'
+// app/(auth)/login.js
+import React, { useState } from "react";
+import { View, Text, StyleSheet, Image, Pressable, TextInput, ActivityIndicator, Alert } from "react-native";
+import { useSignIn } from "@clerk/clerk-expo";
+import { Link, useRouter } from "expo-router";
+import { translateClerkError } from "../../utils/clerkErrors";
+import Accueil from "./index";
 
-export default function Page() {
-    const { signIn, setActive, isLoaded } = useSignIn()
-    const router = useRouter()
+const Login = () => {
+    const { signIn, setActive, isLoaded } = useSignIn();
+    const router = useRouter();
+    const [loginData, setLoginData] = useState({ id: "", pass: "" });
+    const [isPatience, setIsPatience] = useState(false);
 
-    const [emailAddress, setEmailAddress] = React.useState('')
-    const [password, setPassword] = React.useState('')
-    const [code, setCode] = React.useState('')
-    const [showEmailCode, setShowEmailCode] = React.useState(false)
-    const [loading, setLoading] = React.useState(false)
-
-    // Handle the submission of the sign-in form
-    const onSignInPress = React.useCallback(async () => {
-        if (!isLoaded) return
-        setLoading(true)
+    const tenterConnexion = async () => {
+        if (!isLoaded || !loginData.id || !loginData.pass) {
+            return;
+        }
+        setIsPatience(true);
 
         try {
-            const signInAttempt = await signIn.create({
-                identifier: emailAddress,
-                password,
-            })
+            const connectReq = await signIn.create({
+                identifier: loginData.id,
+                password: loginData.pass,
+            });
 
-            if (signInAttempt.status === 'complete') {
-                await setActive({
-                    session: signInAttempt.createdSessionId,
-                })
-                router.replace('/')
-            } else if (signInAttempt.status === 'needs_second_factor') {
-                // Suppression du type TypeScript "EmailCodeFactor" car on est en .js
-                const emailCodeFactor = signInAttempt.supportedSecondFactors?.find(
-                    (factor) => factor.strategy === 'email_code'
-                )
-
-                if (emailCodeFactor) {
-                    await signIn.prepareSecondFactor({
-                        strategy: 'email_code',
-                        emailAddressId: emailCodeFactor.emailAddressId,
-                    })
-                    setShowEmailCode(true)
-                }
-            } else {
-                console.error('Sign-in incomplete status:', signInAttempt.status)
+            if (connectReq.status === "complete") {
+                await setActive({ session: connectReq.createdSessionId });
+                router.replace("/(main)/(home)");
             }
-        } catch (err) {
-            console.error('Sign-in error:', JSON.stringify(err, null, 2))
-            alert(err.errors ? err.errors[0].message : "Une erreur est survenue")
+        } catch (e) {
+            Alert.alert("Oups !", translateClerkError(e));
         } finally {
-            setLoading(false)
+            setIsPatience(false);
         }
-    }, [isLoaded, signIn, setActive, router, emailAddress, password])
-
-    // Handle the submission of the email verification code
-    const onVerifyPress = React.useCallback(async () => {
-        if (!isLoaded) return
-        setLoading(true)
-
-        try {
-            const signInAttempt = await signIn.attemptSecondFactor({
-                strategy: 'email_code',
-                code,
-            })
-
-            if (signInAttempt.status === 'complete') {
-                await setActive({
-                    session: signInAttempt.createdSessionId,
-                })
-                router.replace('/')
-            } else {
-                console.error('Verification incomplete status:', signInAttempt.status)
-            }
-        } catch (err) {
-            console.error('Verification error:', JSON.stringify(err, null, 2))
-            alert(err.errors ? err.errors[0].message : "Code incorrect")
-        } finally {
-            setLoading(false)
-        }
-    }, [isLoaded, signIn, setActive, router, code])
-
-    if (showEmailCode) {
-        return (
-            <View style={styles.container}>
-                <Text style={[styles.label, styles.title]}>
-                    Verify your email
-                </Text>
-                <Text style={styles.description}>
-                    A verification code has been sent to your email.
-                </Text>
-                <TextInput
-                    style={styles.input}
-                    value={code}
-                    placeholder="Enter verification code"
-                    placeholderTextColor="#666666"
-                    onChangeText={setCode}
-                    keyboardType="numeric"
-                />
-                <Pressable
-                    style={({ pressed }) => [
-                        styles.button,
-                        pressed && styles.buttonPressed,
-                        loading && styles.buttonDisabled
-                    ]}
-                    onPress={onVerifyPress}
-                    disabled={loading}
-                >
-                    {loading ? (
-                        <ActivityIndicator color="#fff" />
-                    ) : (
-                        <Text style={styles.buttonText}>Verify</Text>
-                    )}
-                </Pressable>
-            </View>
-        )
-    }
+    };
 
     return (
         <View style={styles.container}>
-            <Text style={[styles.label, styles.title]}>
-                Sign in
-            </Text>
+            <View style={styles.topSection}>
+                <Image source={require("../../assets/site/ft-logo.png")} style={styles.mainLogo} resizeMode="contain"/>
+                <Text style={styles.bigTitle}>FoodTrack</Text>
+                <Text style={styles.tagline}>Ravi de vous revoir parmi nous !</Text>
+            </View>
 
-            <Text style={styles.label}>Email address</Text>
-            <TextInput
-                style={styles.input}
-                autoCapitalize="none"
-                value={emailAddress}
-                placeholder="Enter email"
-                placeholderTextColor="#666666"
-                onChangeText={setEmailAddress}
-                keyboardType="email-address"
-            />
+            <View style={styles.formZone}>
+                <View style={styles.inputWrap}>
+                    <Text style={styles.labelTitle}>Email ou Pseudo</Text>
+                    <TextInput style={styles.inputField} autoCapitalize="none" value={loginData.id} placeholder="votre@mail.com" onChangeText={(val) => setLoginData({...loginData, id: val})}/>
+                </View>
 
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-                style={styles.input}
-                value={password}
-                placeholder="Enter password"
-                placeholderTextColor="#666666"
-                secureTextEntry={true}
-                onChangeText={setPassword}
-            />
+                <View style={styles.inputWrap}>
+                    <Text style={styles.labelTitle}>Mot de passe</Text>
+                    <TextInput style={styles.inputField} value={loginData.pass} placeholder="••••••••" secureTextEntry onChangeText={(val) => setLoginData({...loginData, pass: val})}/>
+                </View>
+            </View>
 
-            <Pressable
-                style={({ pressed }) => [
-                    styles.button,
-                    (!emailAddress || !password || loading) && styles.buttonDisabled,
-                    pressed && styles.buttonPressed,
-                ]}
-                onPress={onSignInPress}
-                disabled={!emailAddress || !password || loading}
-            >
-                {loading ? (
-                    <ActivityIndicator color="#fff" />
-                ) : (
-                    <Text style={styles.buttonText}>Sign in</Text>
-                )}
-            </Pressable>
+            <View style={{paddingTop: 10}}>
+                <Pressable style={({ pressed }) => [styles.mainBtn, isPatience && { opacity: 0.7 }, pressed && { transform: [{ scale: 0.98 }] }]} onPress={tenterConnexion} disabled={isPatience}>
+                    {isPatience ? (<ActivityIndicator color="#fff" />) : (<Text style={styles.btnLabel}>Se connecter</Text>)}
+                </Pressable>
 
-            <View style={styles.linkContainer}>
-                <Text>Don't have an account?</Text>
-                <Link href="/sign-up" asChild>
-                    <Pressable>
-                        <Text style={styles.linkText}>Sign up</Text>
-                    </Pressable>
-                </Link>
+                <View style={styles.subLinks}>
+                    <Text style={{ color: "#777" }}>Nouveau ici ? </Text>
+                    <Link href="/signup" asChild>
+                        <Pressable>
+                            <Text style={{color: "#0a7ea4", fontWeight: "bold"}}>Créer un compte</Text>
+                        </Pressable>
+                    </Link>
+                </View>
             </View>
         </View>
-    )
+    );
 }
+
+export default Login;
+
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        padding: 20,
-        gap: 12,
-        justifyContent: 'center',
+        backgroundColor: "#FFFFFF",
+        justifyContent: "center",
+        paddingHorizontal: 25,
     },
-    title: {
-        fontSize: 24,
-        marginBottom: 8,
-        textAlign: 'center',
+    topSection: {
+        alignItems: "center",
+        marginBottom: 100
     },
-    description: {
-        fontSize: 14,
-        marginBottom: 16,
-        opacity: 0.8,
-        textAlign: 'center',
+    mainLogo: {
+        width: 100,
+        height: 100,
+        marginBottom: 12
     },
-    label: {
-        fontWeight: '600',
-        fontSize: 14,
+    bigTitle: {
+        textAlign: "center",
+        color: "#0a7ea4",
+        fontSize: 34,
+        fontWeight: "900",
+        letterSpacing: -0.5
     },
-    input: {
-        borderWidth: 1,
-        borderColor: '#ccc',
-        borderRadius: 8,
-        padding: 12,
+    tagline: {
+        textAlign: "center",
+        color: "#777",
         fontSize: 16,
-        backgroundColor: '#fff',
     },
-    button: {
-        backgroundColor: '#0a7ea4',
-        paddingVertical: 12,
-        paddingHorizontal: 24,
-        borderRadius: 8,
-        alignItems: 'center',
-        marginTop: 8,
-        minHeight: 48, // Pour éviter que le bouton saute quand le spinner apparaît
-        justifyContent: 'center',
+    formZone: {
+        width: "100%",
     },
-    buttonPressed: {
-        opacity: 0.7,
+    inputWrap: {
+        marginBottom: 20,
     },
-    buttonDisabled: {
-        opacity: 0.5,
+    labelTitle: {
+        fontSize: 13,
+        fontWeight: "bold",
+        color: "#555",
+        marginBottom: 6,
+        textTransform: "uppercase",
     },
-    buttonText: {
-        color: '#fff',
-        fontWeight: '600',
+    inputField: {
+        backgroundColor: "#F8F8F8",
+        height: 58,
+        borderRadius: 18,
+        paddingHorizontal: 20,
+        fontSize: 16,
+        borderWidth: 1,
+        borderColor: "#EEE",
     },
-    linkContainer: {
-        flexDirection: 'row',
-        gap: 4,
-        marginTop: 12,
-        alignItems: 'center',
-        justifyContent: 'center',
+    mainBtn: {
+        backgroundColor: "#0a7ea4",
+        height: 62,
+        borderRadius: 22,
+        justifyContent: "center",
+        alignItems: "center",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        elevation: 3,
     },
-    linkText: {
-        color: '#0a7ea4',
-        fontWeight: '600',
+    btnLabel: {
+        color: "#fff",
+        fontSize: 18,
+        fontWeight: "800",
+    },
+    subLinks: {
+        flexDirection: "row",
+        justifyContent: "center",
+        marginTop: 35,
     }
-})
+});

@@ -1,210 +1,228 @@
-import { useSignUp } from '@clerk/clerk-expo'
-import { Link, useRouter } from 'expo-router'
-import * as React from 'react'
-import { Pressable, StyleSheet, TextInput, View, Text } from 'react-native'
+// app/(auth)/signup.js
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Image, Pressable, TextInput, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { useSignUp } from '@clerk/clerk-expo';
+import { Link, useRouter } from 'expo-router';
+import { translateClerkError } from '../../utils/clerkErrors';
+import { initProfile } from '../../utils/database';
 
-export default function Page() {
-    const { isLoaded, signUp, setActive } = useSignUp()
-    const router = useRouter()
+const SignUp = () => {
+    const { isLoaded, signUp, setActive } = useSignUp();
+    const router = useRouter();
+    const [form, setForm] = useState({ mail: '', pseudo: '', pass: '' });
+    const [codeVerif, setCodeVerif] = useState('');
+    const [enAttente, setEnAttente] = useState(false);
+    const [isAction, setIsAction] = useState(false);
 
-    const [emailAddress, setEmailAddress] = React.useState('')
-    const [password, setPassword] = React.useState('')
-    const [pendingVerification, setPendingVerification] = React.useState(false)
-    const [code, setCode] = React.useState('')
-
-    // Handle submission of sign-up form
-    const onSignUpPress = async () => {
-        if (!isLoaded) return
-
-        // Start sign-up process using email and password provided
+    const lancerInscription = async () => {
+        if (!isLoaded) return;
+        setIsAction(true);
         try {
             await signUp.create({
-                emailAddress,
-                password,
-            })
-
-            // Send user an email with verification code
-            await signUp.prepareEmailAddressVerification({ strategy: 'email_code' })
-
-            // Set 'pendingVerification' to true to display second form
-            // and capture code
-            setPendingVerification(true)
+                emailAddress: form.mail,
+                username: form.pseudo,
+                password: form.pass
+            });
+            await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+            setEnAttente(true);
         } catch (err) {
-            // See https://clerk.com/docs/guides/development/custom-flows/error-handling
-            // for more info on error handling
-            console.error(JSON.stringify(err, null, 2))
+            Alert.alert("Oups", translateClerkError(err));
+        } finally {
+            setIsAction(false);
         }
-    }
+    };
 
-    // Handle submission of verification form
-    const onVerifyPress = async () => {
-        if (!isLoaded) return
-
+    const validerCodeEmail = async () => {
+        if (!isLoaded) return;
+        setIsAction(true);
         try {
-            // Use the code the user provided to attempt verification
-            const signUpAttempt = await signUp.attemptEmailAddressVerification({
-                code,
-            })
+            const tentative = await signUp.attemptEmailAddressVerification({ code: codeVerif });
 
-            // If verification was completed, set the session to active
-            // and redirect the user
-            if (signUpAttempt.status === 'complete') {
-                await setActive({
-                    session: signUpAttempt.createdSessionId,
-                    navigate: async ({ session }) => {
-                        if (session?.currentTask) {
-                            // Check for tasks and navigate to custom UI to help users resolve them
-                            // See https://clerk.com/docs/guides/development/custom-flows/authentication/session-tasks
-                            console.log(session?.currentTask)
-                            return
-                        }
+            if (tentative.status === 'complete') {
+                await initProfile(
+                    tentative.createdUserId,
+                    form.pseudo,
+                    form.mail
+                );
 
-                        router.replace('/')
-                    },
-                })
-            } else {
-                // If the status is not complete, check why. User may need to
-                // complete further steps.
-                console.error(JSON.stringify(signUpAttempt, null, 2))
+                await setActive({ session: tentative.createdSessionId });
+                router.replace('/(main)/(home)');
             }
         } catch (err) {
-            // See https://clerk.com/docs/guides/development/custom-flows/error-handling
-            // for more info on error handling
-            console.error(JSON.stringify(err, null, 2))
+            Alert.alert("Code invalide", translateClerkError(err));
+        } finally {
+            setIsAction(false);
         }
-    }
-
-    if (pendingVerification) {
-        return (
-            <View style={styles.container}>
-                <Text type="title" style={styles.title}>
-                    Verify your email
-                </Text>
-                <Text style={styles.description}>
-                    A verification code has been sent to your email.
-                </Text>
-                <TextInput
-                    style={styles.input}
-                    value={code}
-                    placeholder="Enter your verification code"
-                    placeholderTextColor="#666666"
-                    onChangeText={(code) => setCode(code)}
-                    keyboardType="numeric"
-                />
-                <Pressable
-                    style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-                    onPress={onVerifyPress}
-                >
-                    <Text style={styles.buttonText}>Verify</Text>
-                </Pressable>
-            </View>
-        )
-    }
+    };
 
     return (
-        <View style={styles.container}>
-            <Text type="title" style={[styles.label, styles.title]}>
-                Sign up
-            </Text>
-            <Text style={styles.label}>Email address</Text>
-            <TextInput
-                style={styles.input}
-                autoCapitalize="none"
-                value={emailAddress}
-                placeholder="Enter email"
-                placeholderTextColor="#666666"
-                onChangeText={(email) => setEmailAddress(email)}
-                keyboardType="email-address"
-            />
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-                style={styles.input}
-                value={password}
-                placeholder="Enter password"
-                placeholderTextColor="#666666"
-                secureTextEntry={true}
-                onChangeText={(password) => setPassword(password)}
-            />
-            <Pressable
-                style={({ pressed }) => [
-                    styles.button,
-                    (!emailAddress || !password) && styles.buttonDisabled,
-                    pressed && styles.buttonPressed,
-                ]}
-                onPress={onSignUpPress}
-                disabled={!emailAddress || !password}
-            >
-                <Text style={styles.buttonText}>Continue</Text>
-            </Pressable>
-            <View style={styles.linkContainer}>
-                <Text>Have an account? </Text>
-                <Link href="/sign-in">
-                    <Text style={styles.linkText}>Sign in</Text>
-                </Link>
-            </View>
-        </View>
-    )
+        <KeyboardAvoidingView style={{ flex: 1 }}>
+            <ScrollView contentContainerStyle={styles.container}>
+
+                <View style={styles.topSection}>
+                    <Image source={require("../../assets/site/ft-logo.png")} style={styles.mainLogo} resizeMode="contain"/>
+                    <Text style={styles.bigTitle}>FoodTrack</Text>
+                    <Text style={styles.tagline}>Rejoingnez l'aventure !</Text>
+                </View>
+
+                {enAttente ? (
+                    <View style={styles.formZone}>
+                        <View style={styles.inputWrap}>
+                            <Text style={styles.labelTitle}>Code de vérification</Text>
+                            <TextInput
+                                style={styles.inputField}
+                                value={codeVerif}
+                                placeholder="123456"
+                                onChangeText={setCodeVerif}
+                                keyboardType="numeric"
+                            />
+                        </View>
+                        <Pressable
+                            style={({ pressed }) => [
+                                styles.mainBtn,
+                                isAction && { opacity: 0.7 },
+                                pressed && { transform: [{ scale: 0.98 }] }
+                            ]}
+                            onPress={validerCodeEmail}
+                        >
+                            {isAction ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnLabel}>Vérifier mon email</Text>}
+                        </Pressable>
+                    </View>
+                ) : (
+                    <View style={styles.formZone}>
+                        <View style={styles.inputWrap}>
+                            <Text style={styles.labelTitle}>Nom d'utilisateur</Text>
+                            <TextInput
+                                style={styles.inputField}
+                                autoCapitalize="none"
+                                value={form.pseudo}
+                                placeholder="SuperSalade"
+                                onChangeText={(val) => setForm({...form, pseudo: val})}
+                            />
+                        </View>
+
+                        <View style={styles.inputWrap}>
+                            <Text style={styles.labelTitle}>Email</Text>
+                            <TextInput
+                                style={styles.inputField}
+                                autoCapitalize="none"
+                                value={form.mail}
+                                placeholder="votre@mail.com"
+                                onChangeText={(val) => setForm({...form, mail: val})}
+                                keyboardType="email-address"
+                            />
+                        </View>
+
+                        <View style={styles.inputWrap}>
+                            <Text style={styles.labelTitle}>Mot de passe</Text>
+                            <TextInput
+                                style={styles.inputField}
+                                value={form.pass}
+                                placeholder="Min. 8 caractères"
+                                secureTextEntry
+                                onChangeText={(val) => setForm({...form, pass: val})}
+                            />
+                        </View>
+
+                        <Pressable
+                            style={({ pressed }) => [
+                                styles.mainBtn,
+                                isAction && { opacity: 0.7 },
+                                pressed && { transform: [{ scale: 0.98 }] }
+                            ]}
+                            onPress={lancerInscription}
+                        >
+                            {isAction ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnLabel}>Créer mon compte</Text>}
+                        </Pressable>
+
+                        <View style={styles.subLinks}>
+                            <Text style={{color: "#777"}}>Déjà inscrit ? </Text>
+                            <Link href="/login" asChild>
+                                <Pressable>
+                                    <Text style={{color: '#0a7ea4', fontWeight: 'bold'}}>Se connecter</Text>
+                                </Pressable>
+                            </Link>
+                        </View>
+                    </View>
+                )}
+            </ScrollView>
+        </KeyboardAvoidingView>
+    );
 }
+
+export default SignUp;
+
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        padding: 20,
-        gap: 12,
-        justifyContent: 'center',
+        backgroundColor: "#FFFFFF",
+        justifyContent: "center",
+        paddingHorizontal: 25,
     },
-    title: {
-        fontSize: 24,
-        marginBottom: 8,
-        textAlign: 'center',
+    topSection: {
+        alignItems: "center",
+        marginBottom: 100
     },
-    description: {
-        fontSize: 14,
-        marginBottom: 16,
-        opacity: 0.8,
-        textAlign: 'center',
+    mainLogo: {
+        width: 100,
+        height: 100,
+        marginBottom: 12
     },
-    label: {
-        fontWeight: '600',
-        fontSize: 14,
+    bigTitle: {
+        textAlign: "center",
+        color: "#0a7ea4",
+        fontSize: 34,
+        fontWeight: "900",
+        letterSpacing: -0.5
     },
-    input: {
-        borderWidth: 1,
-        borderColor: '#ccc',
-        borderRadius: 8,
-        padding: 12,
+    tagline: {
+        textAlign: "center",
+        color: "#777",
         fontSize: 16,
-        backgroundColor: '#fff',
     },
-    button: {
+    formZone: {
+        width: '100%',
+    },
+    inputWrap: {
+        marginBottom: 20,
+    },
+    labelTitle: {
+        fontSize: 13,
+        fontWeight: 'bold',
+        color: '#555',
+        marginBottom: 6,
+        textTransform: 'uppercase',
+    },
+    inputField: {
+        backgroundColor: '#F8F8F8',
+        height: 58,
+        borderRadius: 18,
+        paddingHorizontal: 20,
+        fontSize: 16,
+        borderWidth: 1,
+        borderColor: '#EEE',
+    },
+    mainBtn: {
         backgroundColor: '#0a7ea4',
-        paddingVertical: 12,
-        paddingHorizontal: 24,
-        borderRadius: 8,
-        alignItems: 'center',
-        marginTop: 8,
-        minHeight: 48, // Pour éviter que le bouton saute quand le spinner apparaît
+        height: 62,
+        borderRadius: 22,
         justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        elevation: 3,
+        marginTop: 10
     },
-    buttonPressed: {
-        opacity: 0.7,
-    },
-    buttonDisabled: {
-        opacity: 0.5,
-    },
-    buttonText: {
+    btnLabel: {
         color: '#fff',
-        fontWeight: '600',
+        fontSize: 18,
+        fontWeight: '800',
     },
-    linkContainer: {
+    subLinks: {
         flexDirection: 'row',
-        gap: 4,
-        marginTop: 12,
-        alignItems: 'center',
         justifyContent: 'center',
-    },
-    linkText: {
-        color: '#0a7ea4',
-        fontWeight: '600',
+        marginTop: 35,
     }
-})
+});
