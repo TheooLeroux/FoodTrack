@@ -224,9 +224,9 @@ const MonProfil = () => {
                         </Pressable>
                     )}
 
-                    <Pressable style={styles.areaDebug} onPress={resetTout}>
-                        <Text style={styles.txtDebug}>Reset Database (Debug)</Text>
-                    </Pressable>
+                    {/*<Pressable style={styles.areaDebug} onPress={resetTout}>*/}
+                    {/*    <Text style={styles.txtDebug}>Reset Database (Debug)</Text>*/}
+                    {/*</Pressable>*/}
                 </View>
 
             </ScrollView>
